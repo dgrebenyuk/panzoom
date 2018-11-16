@@ -1,6 +1,6 @@
 /**
  * @license jquery.panzoom.js v3.2.2
- * Updated: Wed Jun 21 2017
+ * Updated: Wed Nov 14 2018
  * Add pan and zoom functionality to any element
  * Copyright (c) timmy willison
  * Released under the MIT license
@@ -282,6 +282,9 @@
 		// Whether or not to transition the scale
 		transition: true,
 
+		// Whether to zoom from center of "full" image or center of "visible" image
+		zoomCenter: 'full',
+
 		// Default cursor style for the element
 		cursor: 'move',
 
@@ -548,38 +551,52 @@
 					this.resetDimensions();
 					dims = this.dimensions;
 				}
-				var spaceWLeft, spaceWRight, scaleDiff;
 				var container = this.container;
-				var width = dims.width;
-				var height = dims.height;
-				var conWidth = container.width;
-				var conHeight = container.height;
+				var width = this.elem.offsetWidth * scale;
+				var height = this.elem.offsetHeight * scale;
+				var parentBorderBottom = parseInt(this.$parent.css('border-bottom-width'), 10);
+				var parentBorderRight = parseInt(this.$parent.css('border-right-width'), 10);
+				var originalElementHeight = this.elem.offsetHeight;
+				var originalElementWidth = this.elem.offsetWidth;
+				var conWidth = container.width - parentBorderRight;
+				var conHeight = container.height - parentBorderBottom;
 				var zoomAspectW = conWidth / width;
 				var zoomAspectH = conHeight / height;
 
-				// If the element is not naturally centered,
-				// assume full space right
-				if (this.$parent.css('textAlign') !== 'center' || $.css(this.elem, 'display') !== 'inline') {
-					// offsetWidth gets us the width without the transform
-					scaleDiff = (width - this.elem.offsetWidth) / 2;
-					spaceWLeft = scaleDiff - dims.border.left;
-					spaceWRight = width - conWidth - scaleDiff + dims.border.right;
-				} else {
-					spaceWLeft = spaceWRight = ((width - conWidth) / 2);
-				}
-				var spaceHTop = ((height - conHeight) / 2) + dims.border.top;
-				var spaceHBottom = ((height - conHeight) / 2) - dims.border.top - dims.border.bottom;
+				console.log(conWidth);
+				console.log(width);
+
+				//Constrain X-axis position to the container
+				//Be careful about how Origin is being calculated when transform matrix is used
+
+				//Original X origin - Scaled X Origin
+				var originX = originalElementWidth / 2 - width / 2;
+
+				//Original Element Max X + OriginX - ContainerBorderRight
+				// originalElementWidth + originX - parentBorderRight;
+				var maxXPos = -(conWidth - width) / 2;
+				var minXPos = -(maxXPos + parentBorderRight);
 
 				if (contain === 'invert' || contain === 'automatic' && zoomAspectW < 1.01) {
-					matrix[4] = Math.max(Math.min(matrix[4], spaceWLeft - dims.border.left), -spaceWRight);
+					console.log(matrix[4], maxXPos, -originX);
+					matrix[4] = conWidth > width ? 0 : Math.max(Math.min(matrix[4], maxXPos), minXPos);
 				} else {
-					matrix[4] = Math.min(Math.max(matrix[4], spaceWLeft), -spaceWRight);
+					matrix[4] = Math.max(Math.min(matrix[4], maxXPos), -originX);
 				}
 
+				//Constrain Y-axis position to the container
+				//Be careful about how Origin is being calculated when transform matrix is used
+
+				//Original Y origin - Scaled Y Origin
+				var originY = originalElementHeight / 2 - height / 2;
+
+				//Original Element Max Y + OriginY - ContainerBorderBottom
+				var maxYPos = conHeight - originalElementHeight + originY - parentBorderBottom;
+
 				if (contain === 'invert' || (contain === 'automatic' && zoomAspectH < 1.01)) {
-					matrix[5] = Math.max(Math.min(matrix[5], spaceHTop - dims.border.top), -spaceHBottom);
+					matrix[5] = Math.min(Math.max(matrix[5], maxYPos), -originY);
 				} else {
-					matrix[5] = Math.min(Math.max(matrix[5], spaceHTop), -spaceHBottom);
+					matrix[5] = Math.max(Math.min(matrix[5], maxYPos), -originY);
 				}
 			}
 
@@ -747,6 +764,10 @@
 				clientV = offsetM.x(surfaceM.x(surfaceV));
 				matrix[4] = +matrix[4] + (clientX - clientV.e(0));
 				matrix[5] = +matrix[5] + (clientY - clientV.e(1));
+			} else if (options.zoomCenter === 'visible') {
+				// Keep image centered on middle of visible part of image
+				matrix[4] = +matrix[4] * scale / matrix[0];
+				matrix[5] = +matrix[5] * scale / matrix[0];
 			}
 
 			// Set the scale
@@ -970,7 +991,7 @@
 			if (!options.disablePan || !options.disableZoom) {
 				events[ str_start ] = function(e) {
 					var touches;
-					if (e.type === 'touchstart' ?
+					if (/touchstart|pointerdown/.test(e.type) ?
 						// Touch
 						(touches = e.touches || e.originalEvent.touches) &&
 							((touches.length === 1 && !options.disablePan) || touches.length === 2) :
@@ -1173,9 +1194,6 @@
 			// Remove any transitions happening
 			this.transition(true);
 
-			// Indicate that we are currently panning
-			this.panning = true;
-
 			// Trigger start event
 			this._trigger('start', event, touches);
 
@@ -1209,7 +1227,7 @@
 
 			var move = function(e) {
 				var coords;
-				e.preventDefault();
+				e.stopPropagation();
 				touches = e.touches || e.originalEvent.touches;
 				setStart(e, touches);
 
@@ -1242,6 +1260,9 @@
 				if (!coords) {
 					coords = e;
 				}
+
+				// Indicate that we are currently panning
+				this.panning = true;
 
 				self.pan(
 					origPageX + coords.pageX - startPageX,
