@@ -1,6 +1,6 @@
 /**
  * @license jquery.panzoom.js v3.2.2
- * Updated: Wed Nov 14 2018
+ * Updated: Thu Dec 06 2018
  * Add pan and zoom functionality to any element
  * Copyright (c) timmy willison
  * Released under the MIT license
@@ -330,7 +330,10 @@
 		// Note: this does not affect zooming outside of the parent
 		// Set this value to 'invert' to only allow panning outside of the parent element (basically the opposite of the normal use of contain)
 		// 'invert' is useful for a large panzoom element where you don't want to show anything behind it
-		contain: false
+		contain: false,
+
+		// Original size will be calculated based on aspect ratio
+		sizeByRatio: false
 	};
 
 	Panzoom.prototype = {
@@ -552,19 +555,31 @@
 					dims = this.dimensions;
 				}
 				var container = this.container;
-				var width = this.elem.offsetWidth * scale;
-				var height = this.elem.offsetHeight * scale;
 				var parentBorderBottom = parseInt(this.$parent.css('border-bottom-width'), 10);
 				var parentBorderRight = parseInt(this.$parent.css('border-right-width'), 10);
-				var originalElementHeight = this.elem.offsetHeight;
-				var originalElementWidth = this.elem.offsetWidth;
 				var conWidth = container.width - parentBorderRight;
 				var conHeight = container.height - parentBorderBottom;
+				var originalElementHeight, originalElementWidth;
+
+				if(this.options.sizeByRatio) {
+					var cRatio = conHeight / conWidth;
+					var vRatio = this.elem.videoHeight / this.elem.videoWidth;
+					if(cRatio < vRatio) {
+						originalElementHeight = this.elem.offsetHeight;
+						originalElementWidth = parseInt(originalElementHeight / vRatio, 10);
+					} else {
+						originalElementWidth = this.elem.offsetWidth;
+						originalElementHeight = parseInt(originalElementWidth * vRatio, 10);
+					}
+				} else {
+					originalElementHeight = this.elem.offsetHeight;
+					originalElementWidth = this.elem.offsetWidth;
+				}
+
+				var width = originalElementWidth * scale;
+				var	height = originalElementHeight * scale;
 				var zoomAspectW = conWidth / width;
 				var zoomAspectH = conHeight / height;
-
-				console.log(conWidth);
-				console.log(width);
 
 				//Constrain X-axis position to the container
 				//Be careful about how Origin is being calculated when transform matrix is used
@@ -578,7 +593,6 @@
 				var minXPos = -(maxXPos + parentBorderRight);
 
 				if (contain === 'invert' || contain === 'automatic' && zoomAspectW < 1.01) {
-					console.log(matrix[4], maxXPos, -originX);
 					matrix[4] = conWidth > width ? 0 : Math.max(Math.min(matrix[4], maxXPos), minXPos);
 				} else {
 					matrix[4] = Math.max(Math.min(matrix[4], maxXPos), -originX);
@@ -591,10 +605,11 @@
 				var originY = originalElementHeight / 2 - height / 2;
 
 				//Original Element Max Y + OriginY - ContainerBorderBottom
-				var maxYPos = conHeight - originalElementHeight + originY - parentBorderBottom;
+				var maxYPos = -(conHeight - height) / 2; //conHeight - originalElementHeight + originY - parentBorderBottom;
+				var minYPos = -(maxYPos + parentBorderBottom);
 
 				if (contain === 'invert' || (contain === 'automatic' && zoomAspectH < 1.01)) {
-					matrix[5] = Math.min(Math.max(matrix[5], maxYPos), -originY);
+					matrix[5] = conHeight > height ? 0 : Math.min(Math.max(matrix[5], minYPos), maxYPos);
 				} else {
 					matrix[5] = Math.max(Math.min(matrix[5], maxYPos), -originY);
 				}
