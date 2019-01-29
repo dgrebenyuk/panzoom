@@ -1,6 +1,6 @@
 /**
  * @license jquery.panzoom.js v3.2.2
- * Updated: Fri Dec 28 2018
+ * Updated: Tue Jan 29 2019
  * Add pan and zoom functionality to any element
  * Copyright (c) timmy willison
  * Released under the MIT license
@@ -987,7 +987,7 @@
 			var options = this.options;
 			var ns = options.eventNamespace;
 			var str_down = 'mousedown' + ns + ' pointerdown' + ns + ' MSPointerDown' + ns;
-			var str_start = 'touchstart' + ns + ' ' + str_down;
+			var str_start = 'touchmove' + ns + ' ' + str_down;
 			var str_click = 'touchend' + ns + ' click' + ns + ' pointerup' + ns + ' MSPointerUp' + ns;
 			var events = {};
 			var $reset = this.$reset;
@@ -1002,11 +1002,11 @@
 			});
 
 			// Bind $elem drag and click/touchdown events
-			// Bind touchstart if either panning or zooming is enabled
+			// Bind touchmove if either panning or zooming is enabled
 			if (!options.disablePan || !options.disableZoom) {
 				events[ str_start ] = function(e) {
 					var touches;
-					if (/touchstart|pointerdown/.test(e.type) ?
+					if (/touchmove|pointerdown/.test(e.type) ?
 						// Touch
 						(touches = e.touches || e.originalEvent.touches) &&
 							((touches.length === 1 && !options.disablePan) || touches.length === 2) :
@@ -1016,7 +1016,6 @@
 						!options.disablePan && (e.which || e.originalEvent.which) === options.which) {
 
 						e.preventDefault();
-						e.stopPropagation();
 						self._startMove(e, touches);
 					}
 				};
@@ -1191,7 +1190,7 @@
 			if (type === 'pointerdown') {
 				moveEvent = 'pointermove';
 				endEvent = 'pointerup';
-			} else if (type === 'touchstart') {
+			} else if (type === 'touchmove') {
 				moveEvent = 'touchmove';
 				endEvent = 'touchend';
 			} else if (type === 'MSPointerDown') {
@@ -1208,6 +1207,9 @@
 
 			// Remove any transitions happening
 			this.transition(true);
+
+			// Indicate that we are currently panning
+			this.panning = true;
 
 			// Trigger start event
 			this._trigger('start', event, touches);
@@ -1275,9 +1277,6 @@
 				if (!coords) {
 					coords = e;
 				}
-
-				// Indicate that we are currently panning
-				this.panning = true;
 
 				self.pan(
 					origPageX + coords.pageX - startPageX,
